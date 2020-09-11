@@ -1,25 +1,16 @@
-extern crate protocol;
-use std::net::TcpStream;
-use protocol::{Parcel, Settings};
-use std::io::{Write, Read};
-use protocol::hint::{Hints, FieldLength, LengthPrefixKind};
-
-extern crate libflate;
-
-use std::io;
-use libflate::zlib::Decoder;
-use libflate::zlib::Encoder;
-
-use std::io::prelude::*;
-use flate2::read::ZlibDecoder;
-
 pub mod packets;
 
 use packets::types::*;
 use packets::clientbound;
 use packets::serverbound;
-use crate::connection::packets::clientbound::PacketCb::{Uncompressed, Compressed};
-use crate::connection::packets::clientbound::{IgnoreOrKeepAlive, PacketInnerCb, LoginSuccess, SetCompression};
+use packets::clientbound::{IgnoreOrKeepAlive, PacketInnerCb, LoginSuccess, SetCompression};
+
+use std::net::TcpStream;
+use protocol::{Parcel, Settings};
+use std::io::{Write, Read};
+use protocol::hint::{Hints, FieldLength, LengthPrefixKind};
+use std::io;
+use flate2::read::ZlibDecoder;
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -97,7 +88,7 @@ impl Connection {
 
     fn reader_from_packet(&mut self, packet_length: usize) -> io::Cursor<Vec<u8>> {
         let mut ibuf = vec![0; packet_length as usize];
-        self.stream.read_exact(&mut ibuf);
+        self.stream.read_exact(&mut ibuf).unwrap();
         io::Cursor::new(ibuf)
     }
 
@@ -144,7 +135,7 @@ impl Connection {
 
     pub fn write_packet<P: Parcel>(&mut self, packet: P) {
 
-        self.stream.write_all(&packet.raw_bytes(&self.settings).unwrap());
+        self.stream.write_all(&packet.raw_bytes(&self.settings).unwrap()).unwrap();
     }
 }
 

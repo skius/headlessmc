@@ -1,17 +1,7 @@
-extern crate protocol;
-use std::net::TcpStream;
 use protocol::{Parcel, Settings};
 use std::io::{Write, Read};
 use protocol::hint::Hints;
 
-extern crate libflate;
-
-use std::io;
-use libflate::zlib::Decoder;
-use libflate::zlib::Encoder;
-
-use std::io::prelude::*;
-use flate2::read::ZlibDecoder;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct McString {

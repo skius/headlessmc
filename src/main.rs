@@ -1,14 +1,4 @@
-use std::io::prelude::*;
-use std::net::TcpListener;
-use std::{fs, io};
-use std::thread;
-use std::time::Duration;
-use std::str::{from_utf8, from_utf8_unchecked};
 use headlessmc::*;
-
-extern crate protocol;
-#[macro_use] extern crate protocol_derive;
-use std::net::TcpStream;
 
 fn main() {
     better_run();

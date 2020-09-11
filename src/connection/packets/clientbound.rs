@@ -1,28 +1,12 @@
-extern crate protocol;
-use std::net::TcpStream;
 use protocol::{Parcel, Settings};
 use std::io::{Write, Read};
-use protocol::hint::{Hints, FieldLength};
+use protocol::hint::{Hints};
 
-extern crate libflate;
-
-use std::io;
-use libflate::zlib::Decoder;
-use libflate::zlib::Encoder;
-
-use std::io::prelude::*;
-use flate2::read::ZlibDecoder;
+mod status;
+mod login;
+mod play;
 
 use super::types::*;
-// use self::IgnoreOrKeepAlive::{KeepAlive, Ignore as IOKIgnore};
-
-// pub trait CustomParcel: Parcel {
-//     fn give_length(&mut self, length: VarInt) {
-//
-//     }
-// }
-//
-// impl<T: Parcel> CustomParcel for T {}
 
 #[derive(Protocol, Clone, Debug, PartialEq)]
 pub struct JsonResponse {
@@ -132,7 +116,7 @@ impl Parcel for IgnoreOrKeepAlive {
 
     }
 
-    fn write_field(&self, write: &mut dyn Write, settings: &Settings, hints: &mut Hints) -> Result<(), protocol::Error> {
+    fn write_field(&self, _: &mut dyn Write, _: &Settings, _: &mut Hints) -> Result<(), protocol::Error> {
         Ok(())
     }
 }
