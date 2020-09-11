@@ -5,10 +5,12 @@ use crate::connection::packets::types::*;
 #[protocol(discriminant = "integer")]
 #[repr(u8)] // Force discriminators to be 8-bit.
 pub enum Data {
-    #[protocol(discriminator(0x02))]
+    #[protocol(discriminator(0x00))]
+    Disconnect(Disconnect),
+    EncryptionRequest,
     LoginSuccess(LoginSuccess),
-    #[protocol(discriminator(0x03))]
     SetCompression(SetCompression),
+    LoginPluginRequest,
 }
 
 #[derive(Protocol, Clone, Debug, PartialEq)]
@@ -20,4 +22,9 @@ pub struct LoginSuccess {
 #[derive(Protocol, Clone, Debug, PartialEq)]
 pub struct SetCompression {
     pub threshold: VarInt,
+}
+
+#[derive(Protocol, Clone, Debug, PartialEq)]
+pub struct Disconnect {
+    pub reason: Chat,
 }

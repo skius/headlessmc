@@ -21,6 +21,9 @@ impl McString {
     // }
 }
 
+#[derive(Protocol, Clone, Debug, PartialEq)]
+pub struct Chat(pub McString);
+
 impl Parcel for McString {
     const TYPE_NAME: &'static str = "String";
 

@@ -2,133 +2,71 @@
 use std::net::TcpStream;
 
 
-mod connection;
+pub mod connection;
 use connection::packets::types::*;
 use connection::packets::serverbound;
+use serverbound::login::LoginStart as LoginStartSb;
+use serverbound::handshaking::Handshake as HandshakeSb;
+use serverbound::status::Request as RequestSb;
+use serverbound::status::Ping as PingSb;
+use serverbound::play::KeepAlive as KeepAliveSb;
+use serverbound::play::ChatMessage as ChatMessageSb;
 use connection::packets::clientbound;
 use connection::Connection;
 
 use itertools::Itertools;
 
 pub fn better_run() {
-    let stream = TcpStream::connect("localhost:25565").unwrap();
-    let settings = protocol::Settings {
-        byte_order: protocol::ByteOrder::BigEndian,
-        ..Default::default()
-    };
-    let mut connection = Connection { stream, compression_threshold: -1, settings };
+    let mut connection = Connection::new("127.0.0.1:25565");
 
-    let handshake = serverbound::handshaking::Data::Handshake(serverbound::handshaking::Handshake::new("127.0.0.1".to_string(), 25565, VarInt { val: 1 }));
-    connection.write_state_packet(handshake);
+    let handshake = serverbound::handshaking::Data::Handshake(HandshakeSb::new("127.0.0.1".to_string(), 25565, VarInt { val: 1 }));
+    connection.write_data(handshake);
 
-    let req = serverbound::status::Data::Request(serverbound::status::Request {});
-    connection.write_state_packet(req);
+    let req = serverbound::status::Data::Request(RequestSb {});
+    connection.write_data(req);
+    println!("{:?}", connection.read_data::<clientbound::status::Data>());
 
-
-    // let mut ibuf = vec![0u8];
-    // connection.consume_packet().read_to_end(&mut ibuf);
-    // println!("got: {:02x}", ibuf[0..].iter().format(" "));
-
-    println!("{:?}", connection.read_state_packet::<clientbound::status::Data>());
-
-    let stream = TcpStream::connect("localhost:25565").unwrap();
-    let settings = protocol::Settings {
-        byte_order: protocol::ByteOrder::BigEndian,
-        ..Default::default()
-    };
-    let mut connection = Connection { stream, compression_threshold: -1, settings };
+    let ping = serverbound::status::Data::Ping(PingSb {payload: 6969});
+    connection.write_data(ping);
+    println!("{:?}", connection.read_data::<clientbound::status::Data>());
 
 
-    let handshake = serverbound::handshaking::Data::Handshake(serverbound::handshaking::Handshake::new("127.0.0.1".to_string(), 25565, VarInt { val: 2 }));
-    connection.write_state_packet(handshake);
 
-    let inner = serverbound::login::LoginStart { name: McString::new("testbot123") };
+    let mut connection = Connection::new("127.0.0.1:25565");
+
+
+    let handshake = serverbound::handshaking::Data::Handshake(HandshakeSb::new("127.0.0.1".to_string(), 25565, VarInt { val: 2 }));
+    connection.write_data(handshake);
+
+    let inner = LoginStartSb { name: McString::new("testbot123") };
     let login_start = serverbound::login::Data::LoginStart(inner);
-    connection.write_state_packet(login_start);
+    connection.write_data(login_start);
 
 
-    println!("{:?}", connection.read_state_packet::<clientbound::login::Data>());
+    println!("{:?}", connection.read_data::<clientbound::login::Data>());
 
 
-    // let mut possibilities: HashMap<i32, PacketInnerCb> = HashMap::new();
-    // possibilities.insert(0x2, PacketInnerCb::LoginSuccess);
-    // possibilities.insert(0x3, PacketInnerCb::SetCompression);
-    //
-    // println!("{:?}", connection.read_possible_packets(possibilities));
-
-    // let mut ibuf = vec![0u8; 0];
-    // let mut reader = connection.consume_packet();
-    // // reader.read_to_end(&mut ibuf);
-    // // println!("got: {:02x}", ibuf[0..].iter().format(" "));
-    //
-    // let VarInt { val: packet_id } = VarInt::read_field(&mut reader, &connection.settings, &mut Hints::default()).unwrap();
-    // println!("{:?}", packet_id);
-
-
-    // let set_compression = ExplPacket::<SetCompression>::read_field(&mut stream, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    // println!("Resp: {:?}", set_compression);
-
-    // let VarInt { val: packet_length } = VarInt::read_field(&mut stream, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    // let VarInt { val: data_length } = VarInt::read_field(&mut stream, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    //
-    // if data_length == 0 {
-    //     let id: u8 = u8::read_field(&mut stream, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    //
-    //     let login_success = LoginSuccess::read_field(&mut stream, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    //     println!("Uncompressed Resp: {:?}", login_success);
-    // } else {
-    //     let mut ibuf = vec![0; packet_length as usize - 1];
-    //     stream.read_exact(&mut ibuf);
-    //     println!("got: {:02x}", ibuf[0..].iter().format(" "));
-    //     println!("str: {}", String::from_utf8_lossy(&ibuf[1..]));
-    //
-    //
-    //     let mut buf = io::Cursor::new(ibuf);
-    //
-    //
-    //
-    //     let mut decoder = Decoder::new(&mut buf).unwrap();
-    //     let id: u8 = u8::read_field(&mut decoder, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    //
-    //     let login_success = LoginSuccess::read_field(&mut decoder, &settings, &mut protocol::hint::Hints::default()).unwrap();
-    //     println!("Compressed Resp: {:?}", login_success);
-    //     // println!("Resp is: {:02x}", login_success.raw_bytes(&settings).unwrap().iter().format(" "));
-    //
-    // }
-
-
-    // let packet = connection.read_packet::<LoginSuccess>();
-    //
-    // println!("LoginSuccess Response: {:?}", packet);
-
-    // match packet {
-    //     PacketCb::Compressed(packet) => {
-    //
-    //
-    //     }
-    // }
 
     loop {
-        match connection.read_state_packet() {
+        match connection.read_data() {
             clientbound::play::Data::KeepAlive(keep_alive) => {
                 println!("Got keep alive: {:?}", keep_alive);
 
-                let inner = serverbound::play::KeepAlive { keep_alive_id: keep_alive.keep_alive_id };
-                connection.write_state_packet(serverbound::play::Data::KeepAlive(inner));
+                let inner = KeepAliveSb { keep_alive_id: keep_alive.keep_alive_id };
+                connection.write_data(serverbound::play::Data::KeepAlive(inner));
 
-                // if connection.compression_threshold < 0 {
-                //     let mut keep_alive_response = PacketSb::new(PacketKind::KeepAlive(inner.clone()));
-                //     keep_alive_response.update_length(8);
-                //     // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
-                //     connection.write_packet(keep_alive_response);
-                // } else {
-                //     let mut keep_alive_response = CompressedPacketSb::new(PacketKind::KeepAlive(inner.clone()));
-                //     keep_alive_response.update_length(8);
-                //     connection.write_packet(keep_alive_response);
-                //     // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
-                // }
+                let chat_response = ChatMessageSb { message: McString::new(&format!("Hi there, I got a keep alive from you: {}", keep_alive.keep_alive_id))};
+                connection.write_data(serverbound::play::Data::ChatMessage(chat_response));
+
             },
-            _ => (),
+            clientbound::play::Data::ChatMessage(chat_message) => {
+                println!("Got chat: {}", chat_message.json_data.0.str);
+            },
+            clientbound::play::Data::Disconnect(disconnect) => {
+                println!("Was disconnected: {:?}", disconnect);
+                break;
+            }
+            _ => (), // I'm only handling Play packets that are KeepAlives
         }
     }
 }

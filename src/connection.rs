@@ -4,6 +4,7 @@ use packets::types::*;
 use packets::clientbound;
 use packets::serverbound;
 
+use std::fmt::Debug;
 use std::net::TcpStream;
 use protocol::{Parcel, Settings};
 use std::io::{Write, Read};
@@ -15,9 +16,19 @@ pub struct Connection {
     pub stream: TcpStream,
     pub settings: Settings,
     pub compression_threshold: i32,
+    pub log: bool,
 }
 
 impl Connection {
+    pub fn new(address: &str) -> Connection {
+        let stream = TcpStream::connect(address).unwrap();
+        let settings = protocol::Settings {
+            byte_order: protocol::ByteOrder::BigEndian,
+            ..Default::default()
+        };
+        Connection { stream, compression_threshold: -1, settings , log: false }
+    }
+
     pub fn decompress<R: Read>(mut reader: R, length: usize) -> io::Cursor<Vec<u8>> {
         let mut new = Vec::with_capacity(length as usize);
         {
@@ -131,7 +142,7 @@ impl Connection {
     // }
 
 
-    pub fn read_state_packet<T: StateData>(&mut self) -> T {
+    pub fn read_data<T: StateData>(&mut self) -> T {
         let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
 
         let mut reader = self.reader_from_packet(packet_length as usize);
@@ -146,7 +157,13 @@ impl Connection {
             }
 
         }
-        T::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap()
+        let data = T::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
+
+        if self.log {
+            println!("Reading: {:?}", data);
+        }
+
+        data
     }
 
 
@@ -154,7 +171,11 @@ impl Connection {
         self.stream.write_all(&packet.raw_bytes(&self.settings).unwrap()).unwrap();
     }
 
-    pub fn write_state_packet<T: StateData>(&mut self, data: T) {
+    pub fn write_data<T: StateData>(&mut self, data: T) {
+        if self.log {
+            println!("Writing: {:?}", data);
+        }
+
         if self.compression_threshold < 0 {
             let length = data.length(&self);
             // let mut packet = PacketSb::new(data);
@@ -163,13 +184,15 @@ impl Connection {
             self.write_packet(length);
             self.write_packet(data);
 
+        } else {
+            // Handle compressed data
         }
 
     }
 }
 
 
-pub trait StateData: Parcel {
+pub trait StateData: Parcel + Debug {
     fn length(&self, conn: &Connection) -> VarInt {
         VarInt { val: self.raw_bytes(&conn.settings).unwrap().len() as i32 }
     }
