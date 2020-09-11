@@ -4,12 +4,11 @@ use std::net::TcpStream;
 
 mod connection;
 use connection::packets::types::*;
-use connection::packets::serverbound::*;
-use connection::packets::clientbound::*;
+use connection::packets::serverbound;
+use connection::packets::clientbound;
 use connection::Connection;
 
 use itertools::Itertools;
-use std::collections::HashMap;
 
 pub fn better_run() {
     let stream = TcpStream::connect("localhost:25565").unwrap();
@@ -17,27 +16,45 @@ pub fn better_run() {
         byte_order: protocol::ByteOrder::BigEndian,
         ..Default::default()
     };
-
     let mut connection = Connection { stream, compression_threshold: -1, settings };
 
-    let inner = Handshake::new("127.0.0.1".to_string(), 25565, VarInt { val: 2 });
-    let mut first_handshake = PacketSb::new(PacketKind::Handshake(inner.clone()));
-    first_handshake.update_length(inner.length());
-    // stream.write_all(&first_handshake.raw_bytes(&settings).unwrap());
-    connection.write_packet(first_handshake);
+    let handshake = serverbound::handshaking::Data::Handshake(serverbound::handshaking::Handshake::new("127.0.0.1".to_string(), 25565, VarInt { val: 1 }));
+    connection.write_state_packet(handshake);
 
-    let inner = LoginStart { name: McString::new("testbot123") };
-    let mut login_start = PacketSb::new(PacketKind::LoginStart(inner.clone()));
-    login_start.update_length(inner.length());
-    // stream.write_all(&login_start.raw_bytes(&settings).unwrap());
-    connection.write_packet(login_start);
+    let req = serverbound::status::Data::Request(serverbound::status::Request {});
+    connection.write_state_packet(req);
 
 
-    let mut possibilities: HashMap<i32, PacketInnerCb> = HashMap::new();
-    possibilities.insert(0x2, PacketInnerCb::LoginSuccess);
-    possibilities.insert(0x3, PacketInnerCb::SetCompression);
+    // let mut ibuf = vec![0u8];
+    // connection.consume_packet().read_to_end(&mut ibuf);
+    // println!("got: {:02x}", ibuf[0..].iter().format(" "));
 
-    println!("{:?}", connection.read_possible_packets(possibilities));
+    println!("{:?}", connection.read_state_packet::<clientbound::status::Data>());
+
+    let stream = TcpStream::connect("localhost:25565").unwrap();
+    let settings = protocol::Settings {
+        byte_order: protocol::ByteOrder::BigEndian,
+        ..Default::default()
+    };
+    let mut connection = Connection { stream, compression_threshold: -1, settings };
+
+
+    let handshake = serverbound::handshaking::Data::Handshake(serverbound::handshaking::Handshake::new("127.0.0.1".to_string(), 25565, VarInt { val: 2 }));
+    connection.write_state_packet(handshake);
+
+    let inner = serverbound::login::LoginStart { name: McString::new("testbot123") };
+    let login_start = serverbound::login::Data::LoginStart(inner);
+    connection.write_state_packet(login_start);
+
+
+    println!("{:?}", connection.read_state_packet::<clientbound::login::Data>());
+
+
+    // let mut possibilities: HashMap<i32, PacketInnerCb> = HashMap::new();
+    // possibilities.insert(0x2, PacketInnerCb::LoginSuccess);
+    // possibilities.insert(0x3, PacketInnerCb::SetCompression);
+    //
+    // println!("{:?}", connection.read_possible_packets(possibilities));
 
     // let mut ibuf = vec![0u8; 0];
     // let mut reader = connection.consume_packet();
@@ -92,23 +109,24 @@ pub fn better_run() {
     // }
 
     loop {
-        match connection.read_ignore_or_keep_alive() {
-            IgnoreOrKeepAlive::KeepAlive(keep_alive) => {
+        match connection.read_state_packet() {
+            clientbound::play::Data::KeepAlive(keep_alive) => {
                 println!("Got keep alive: {:?}", keep_alive);
 
-                let inner = KeepAlive { keep_alive_id: keep_alive.keep_alive_id };
+                let inner = serverbound::play::KeepAlive { keep_alive_id: keep_alive.keep_alive_id };
+                connection.write_state_packet(serverbound::play::Data::KeepAlive(inner));
 
-                if connection.compression_threshold < 0 {
-                    let mut keep_alive_response = PacketSb::new(PacketKind::KeepAlive(inner.clone()));
-                    keep_alive_response.update_length(8);
-                    // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
-                    connection.write_packet(keep_alive_response);
-                } else {
-                    let mut keep_alive_response = CompressedPacketSb::new(PacketKind::KeepAlive(inner.clone()));
-                    keep_alive_response.update_length(8);
-                    connection.write_packet(keep_alive_response);
-                    // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
-                }
+                // if connection.compression_threshold < 0 {
+                //     let mut keep_alive_response = PacketSb::new(PacketKind::KeepAlive(inner.clone()));
+                //     keep_alive_response.update_length(8);
+                //     // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
+                //     connection.write_packet(keep_alive_response);
+                // } else {
+                //     let mut keep_alive_response = CompressedPacketSb::new(PacketKind::KeepAlive(inner.clone()));
+                //     keep_alive_response.update_length(8);
+                //     connection.write_packet(keep_alive_response);
+                //     // connection.stream.write_all(&keep_alive_response.raw_bytes(&connection.settings).unwrap());
+                // }
             },
             _ => (),
         }

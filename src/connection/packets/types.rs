@@ -14,11 +14,11 @@ impl McString {
         McString { length: VarInt { val: str.len() as i32 } , str: str.to_string()}
     }
 
-    pub fn length(&self) -> i32 {
-        self.length.length() + match self.length {
-            VarInt { val: len } => len,
-        }
-    }
+    // pub fn length(&self) -> i32 {
+    //     self.length.length() + match self.length {
+    //         VarInt { val: len } => len,
+    //     }
+    // }
 }
 
 impl Parcel for McString {
@@ -51,12 +51,12 @@ impl Parcel for McString {
 pub struct VarInt {
     pub val: i32,
 }
-
-impl VarInt {
-    pub fn length(&self) -> i32 {
-        self.raw_bytes(&protocol::Settings::default()).unwrap().len() as i32
-    }
-}
+//
+// impl VarInt {
+//     pub fn length(&self) -> i32 {
+//         self.raw_bytes(&protocol::Settings::default()).unwrap().len() as i32
+//     }
+// }
 
 impl Parcel for VarInt {
     const TYPE_NAME: &'static str = "VarInt";

@@ -5,17 +5,16 @@ use crate::connection::packets::types::*;
 #[repr(u8)] // Force discriminators to be 8-bit.
 pub enum Data {
     #[protocol(discriminator(0x00))]
-    JsonResponse(JsonResponse),
+    Request(Request),
     #[protocol(discriminator(0x01))]
-    Pong(Pong),
+    Ping(Ping),
 }
 
 #[derive(Protocol, Clone, Debug, PartialEq)]
-pub struct JsonResponse {
-    pub json: McString,
+pub struct Request {
 }
 
 #[derive(Protocol, Clone, Debug, PartialEq)]
-pub struct Pong {
+pub struct Ping {
     pub payload: u64,
 }
