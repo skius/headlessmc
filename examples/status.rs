@@ -6,16 +6,16 @@ use serverbound::status::Request as RequestSb;
 use serverbound::status::Ping as PingSb;
 
 fn main() {
-    let mut connection = Connection::new("127.0.0.1:25565");
+    let (mut in_stream, mut out_stream) = Connection::new("127.0.0.1:25565", false);
 
     let handshake = serverbound::handshaking::Data::Handshake(HandshakeSb::new("127.0.0.1".to_string(), 25565, VarInt { val: 1 }));
-    connection.write_data(handshake);
+    out_stream.write_data(handshake);
 
     let req = serverbound::status::Data::Request(RequestSb {});
-    connection.write_data(req);
-    println!("{:?}", connection.read_data::<clientbound::status::Data>());
+    out_stream.write_data(req);
+    println!("{:?}", in_stream.read_data::<clientbound::status::Data>());
 
     let ping = serverbound::status::Data::Ping(PingSb { payload: 42 });
-    connection.write_data(ping);
-    println!("{:?}", connection.read_data::<clientbound::status::Data>());
+    out_stream.write_data(ping);
+    println!("{:?}", in_stream.read_data::<clientbound::status::Data>());
 }

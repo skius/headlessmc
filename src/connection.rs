@@ -15,23 +15,25 @@ use std::sync::{Arc, Mutex};
 use std::ops::Deref;
 
 pub struct Connection {
-    pub stream: Arc<Mutex<TcpStream>>,
-    pub settings: Settings,
-    pub compression_threshold: Arc<Mutex<i32>>,
-    pub log: bool,
+    stream: Arc<Mutex<TcpStream>>,
+    settings: Settings,
+    compression_threshold: Arc<Mutex<i32>>,
+    log: bool,
 }
 
 impl Connection {
-    pub fn new(address: &str) -> Connection {
+    pub fn new(address: &str, log: bool) -> (InMcStream, OutMcStream) {
         let stream = TcpStream::connect(address).unwrap();
         let settings = protocol::Settings {
             byte_order: protocol::ByteOrder::BigEndian,
             ..Default::default()
         };
-        Connection { stream: Arc::new(Mutex::new(stream)), compression_threshold: Arc::new(Mutex::new(-1)), settings, log: false }
+        let in_conn = Connection { stream: Arc::new(Mutex::new(stream)), compression_threshold: Arc::new(Mutex::new(-1)), settings, log };
+        let out_conn = in_conn.clone();
+        (InMcStream { conn: in_conn }, OutMcStream { conn: out_conn})
     }
 
-    pub fn decompress<R: Read>(mut reader: R, length: usize) -> io::Cursor<Vec<u8>> {
+    fn decompress<R: Read>(mut reader: R, length: usize) -> io::Cursor<Vec<u8>> {
         let mut new = Vec::with_capacity(length as usize);
         {
             let mut reader = ZlibDecoder::new(&mut reader);
@@ -41,7 +43,7 @@ impl Connection {
         io::Cursor::new(new)
     }
 
-    pub fn update_compression_threshold(&mut self, new_threshold: i32) {
+    fn update_compression_threshold(&mut self, new_threshold: i32) {
         *self.compression_threshold.lock().unwrap() = new_threshold;
     }
 
@@ -51,7 +53,7 @@ impl Connection {
         io::Cursor::new(ibuf)
     }
 
-    pub fn read_data<T: StateData>(&mut self) -> T {
+    fn read_data<T: StateData>(&mut self) -> T {
         let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream.lock().unwrap().deref(), &self.settings, &mut Hints::default()).unwrap();
 
         let mut reader = self.reader_from_packet(packet_length as usize);
@@ -75,11 +77,11 @@ impl Connection {
     }
 
 
-    pub fn write_packet<P: Parcel>(&mut self, packet: P) {
+    fn write_packet<P: Parcel>(&mut self, packet: P) {
         self.stream.lock().unwrap().write_all(&packet.raw_bytes(&self.settings).unwrap()).unwrap();
     }
 
-    pub fn write_data<T: StateData>(&mut self, data: T) {
+    fn write_data<T: StateData>(&mut self, data: T) {
         if self.log {
             println!("Writing: {:?}", data);
         }
@@ -112,6 +114,40 @@ impl Connection {
 impl Clone for Connection {
     fn clone(&self) -> Self {
         Connection { compression_threshold: self.compression_threshold.clone(), stream: self.stream.clone(), settings: self.settings.clone(), log: self.log }
+    }
+}
+
+pub struct InMcStream {
+    conn: Connection
+}
+
+impl InMcStream {
+    pub fn read_data<T: StateData>(&mut self) -> T {
+        self.conn.read_data()
+    }
+
+    pub fn update_compression_threshold(&mut self, new_threshold: i32) {
+        self.conn.update_compression_threshold(new_threshold)
+    }
+}
+
+pub struct OutMcStream {
+    conn: Connection
+}
+
+impl OutMcStream {
+    pub fn write_data<T: StateData>(&mut self, data: T) {
+        self.conn.write_data(data)
+    }
+
+    pub fn update_compression_threshold(&mut self, new_threshold: i32) {
+        self.conn.update_compression_threshold(new_threshold)
+    }
+}
+
+impl Clone for OutMcStream {
+    fn clone(&self) -> Self {
+        OutMcStream { conn: self.conn.clone() }
     }
 }
 
