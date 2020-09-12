@@ -1,6 +1,7 @@
 use protocol::{Parcel, Settings};
 use std::io::{Write, Read};
 use protocol::hint::Hints;
+use jsonparse::Value;
 
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,16 +14,71 @@ impl McString {
     pub fn new(str: &str) -> McString {
         McString { length: VarInt { val: str.len() as i32 } , str: str.to_string()}
     }
-
-    // pub fn length(&self) -> i32 {
-    //     self.length.length() + match self.length {
-    //         VarInt { val: len } => len,
-    //     }
-    // }
 }
 
 #[derive(Protocol, Clone, Debug, PartialEq)]
 pub struct Chat(pub McString);
+
+impl Chat {
+    pub fn content(&self) -> ChatType {
+        let inner_json = jsonparse::Parser::new(&self.0.str).parse().unwrap();
+        match &inner_json["translate"] {
+            Value::JsonString(inner) => {
+                match &inner[..] {
+                    "chat.type.text" => {
+                        if let (Value::JsonString(username), Value::JsonString(message)) = (&inner_json["with"][0]["text"], &inner_json["with"][1]){
+                            ChatType::Text { username: username.clone(), message: message.clone() }
+                        } else {
+                            panic!("Expected JsonString in field text of chat")
+                        }
+                    },
+                    "chat.type.announcement" => {
+                        if let (Value::JsonString(from), Value::JsonString(message)) = (&inner_json["with"][0]["text"], &inner_json["with"][1]["text"]){
+                            ChatType::Announcement { from: from.clone(), message: message.clone() }
+                        } else {
+                            panic!("Expected JsonString in field text of chat")
+                        }
+                    },
+                    "multiplayer.player.joined" => {
+                        if let Value::JsonString(player) = &inner_json["with"][0]["text"] {
+                            ChatType::PlayerJoin { player: player.clone() }
+                        } else {
+                            panic!("Expected JsonString in field text of chat")
+                        }
+                    },
+                    "multiplayer.player.left" => {
+                        if let Value::JsonString(player) = &inner_json["with"][0]["text"] {
+                            ChatType::PlayerLeft { player: player.clone() }
+                        } else {
+                            panic!("Expected JsonString in field text of chat")
+                        }
+                    },
+                    _ => ChatType::Unsupported(self.0.str.clone())
+                }
+            },
+            _ => panic!("Expected String at field translate of chat")
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ChatType {
+    Text {
+        username: String,
+        message: String
+    },
+    Announcement {
+        from: String,
+        message: String
+    },
+    PlayerJoin {
+        player: String,
+    },
+    PlayerLeft {
+        player: String,
+    },
+    Unsupported(String)
+}
 
 impl Parcel for McString {
     const TYPE_NAME: &'static str = "String";
@@ -54,12 +110,6 @@ impl Parcel for McString {
 pub struct VarInt {
     pub val: i32,
 }
-//
-// impl VarInt {
-//     pub fn length(&self) -> i32 {
-//         self.raw_bytes(&protocol::Settings::default()).unwrap().len() as i32
-//     }
-// }
 
 impl Parcel for VarInt {
     const TYPE_NAME: &'static str = "VarInt";
@@ -112,7 +162,5 @@ impl Parcel for VarInt {
 
         Ok(())
     }
-
-
 }
 

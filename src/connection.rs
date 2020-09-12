@@ -11,14 +11,18 @@ use std::io::{Write, Read};
 use protocol::hint::{Hints};
 use std::io;
 use flate2::read::ZlibDecoder;
+use std::sync::{Arc, Mutex};
+use std::ops::Deref;
 
 pub struct Connection {
-    pub stream: TcpStream,
+    pub stream: Arc<Mutex<TcpStream>>,
     pub settings: Settings,
-    pub compression_threshold: i32,
+    pub compression_threshold: Arc<Mutex<i32>>,
     pub log: bool,
 }
 
+
+// TODO: Next thing to do, wrap stream in Arc<Mutex<>> so that i can use it in multiple threads. I need multiple threads to support reading from std in to send chat messages
 impl Connection {
     pub fn new(address: &str) -> Connection {
         let stream = TcpStream::connect(address).unwrap();
@@ -26,7 +30,7 @@ impl Connection {
             byte_order: protocol::ByteOrder::BigEndian,
             ..Default::default()
         };
-        Connection { stream, compression_threshold: -1, settings , log: false }
+        Connection { stream: Arc::new(Mutex::new(stream)), compression_threshold: Arc::new(Mutex::new(-1)), settings , log: false }
     }
 
     pub fn decompress<R: Read>(mut reader: R, length: usize) -> io::Cursor<Vec<u8>> {
@@ -93,14 +97,18 @@ impl Connection {
     //     clientbound::ExplCompressedPacket::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap()
     // }
 
+    pub fn update_compression_threshold(&mut self, new_threshold: i32) {
+        *self.compression_threshold.lock().unwrap() = new_threshold;
+    }
+
     fn reader_from_packet(&mut self, packet_length: usize) -> io::Cursor<Vec<u8>> {
         let mut ibuf = vec![0; packet_length as usize];
-        self.stream.read_exact(&mut ibuf).unwrap();
+        self.stream.lock().unwrap().read_exact(&mut ibuf).unwrap();
         io::Cursor::new(ibuf)
     }
 
     pub fn consume_packet(&mut self) -> io::Cursor<Vec<u8>> {
-        let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
+        let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream.lock().unwrap().deref(), &self.settings, &mut Hints::default()).unwrap();
 
         self.reader_from_packet(packet_length as usize)
     }
@@ -143,12 +151,12 @@ impl Connection {
 
 
     pub fn read_data<T: StateData>(&mut self) -> T {
-        let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
+        let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream.lock().unwrap().deref(), &self.settings, &mut Hints::default()).unwrap();
 
         let mut reader = self.reader_from_packet(packet_length as usize);
 
 
-        if self.compression_threshold >= 0 {
+        if *self.compression_threshold.lock().unwrap() >= 0 {
 
             let VarInt { val: data_length } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
 
@@ -168,7 +176,7 @@ impl Connection {
 
 
     pub fn write_packet<P: Parcel>(&mut self, packet: P) {
-        self.stream.write_all(&packet.raw_bytes(&self.settings).unwrap()).unwrap();
+        self.stream.lock().unwrap().write_all(&packet.raw_bytes(&self.settings).unwrap()).unwrap();
     }
 
     pub fn write_data<T: StateData>(&mut self, data: T) {
@@ -176,7 +184,7 @@ impl Connection {
             println!("Writing: {:?}", data);
         }
 
-        if self.compression_threshold < 0 {
+        if *self.compression_threshold.lock().unwrap() < 0 {
             let length = data.length(&self);
             // let mut packet = PacketSb::new(data);
             // packet.length = length;
@@ -186,11 +194,28 @@ impl Connection {
 
         } else {
             // Handle compressed data
+
+            // length of data_length is 1
+            let length = 1;
+
+            let VarInt { val: packet_length } = data.length(&self);
+
+            let packet_length = VarInt { val: length + packet_length };
+            let data_length = VarInt { val: 0 };
+
+            self.write_packet(packet_length);
+            self.write_packet(data_length);
+            self.write_packet(data);
         }
 
     }
 }
 
+impl Clone for Connection {
+    fn clone(&self) -> Self {
+        Connection { compression_threshold: self.compression_threshold.clone(), stream: self.stream.clone(), settings: self.settings.clone(), log: self.log }
+    }
+}
 
 pub trait StateData: Parcel + Debug {
     fn length(&self, conn: &Connection) -> VarInt {
