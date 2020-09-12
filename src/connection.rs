@@ -21,8 +21,6 @@ pub struct Connection {
     pub log: bool,
 }
 
-
-// TODO: Next thing to do, wrap stream in Arc<Mutex<>> so that i can use it in multiple threads. I need multiple threads to support reading from std in to send chat messages
 impl Connection {
     pub fn new(address: &str) -> Connection {
         let stream = TcpStream::connect(address).unwrap();
@@ -30,7 +28,7 @@ impl Connection {
             byte_order: protocol::ByteOrder::BigEndian,
             ..Default::default()
         };
-        Connection { stream: Arc::new(Mutex::new(stream)), compression_threshold: Arc::new(Mutex::new(-1)), settings , log: false }
+        Connection { stream: Arc::new(Mutex::new(stream)), compression_threshold: Arc::new(Mutex::new(-1)), settings, log: false }
     }
 
     pub fn decompress<R: Read>(mut reader: R, length: usize) -> io::Cursor<Vec<u8>> {
@@ -43,60 +41,6 @@ impl Connection {
         io::Cursor::new(new)
     }
 
-    // pub fn read_packet<T: Parcel>(&mut self) -> clientbound::PacketCb<T> {
-    //     if self.compression_threshold < 0 {
-    //         clientbound::PacketCb::Uncompressed(self.read_uncompressed())
-    //     } else {
-    //         clientbound::PacketCb::Compressed(self.read_compressed())
-    //
-    //     }
-    //
-    // }
-
-    // pub fn read_ignore_or_keep_alive(&mut self) -> clientbound::IgnoreOrKeepAlive {
-    //     let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //     let mut reader = self.reader_from_packet(packet_length as usize);
-    //
-    //     let data_length = packet_length;
-    //
-    //     if self.compression_threshold >= 0 {
-    //         let VarInt { val: data_length } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //         // This means it's compressed
-    //         if data_length > 0 {
-    //             reader = Connection::decompress(reader, data_length as usize);
-    //         }
-    //     }
-    //
-    //     let mut hints = Hints::default();
-    //     hints.known_field_lengths.insert(0, FieldLength { length: data_length as usize, kind: LengthPrefixKind::Bytes } );
-    //
-    //     clientbound::IgnoreOrKeepAlive::read_field(&mut reader, &self.settings, &mut hints).unwrap()
-    // }
-
-    // fn read_uncompressed<T: Parcel>(&mut self) -> clientbound::ExplPacket<T> {
-    //     // let packet_length = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
-    //     clientbound::ExplPacket::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap()
-    // }
-    //
-    // fn read_compressed<T: Parcel>(&mut self) -> clientbound::ExplCompressedPacket<T> {
-    //     // let packet_length = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
-    //     let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //     let mut reader = self.reader_from_packet(packet_length as usize);
-    //
-    //     let VarInt { val: data_length } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //     // This means it's compressed
-    //     if data_length > 0 {
-    //         reader = Connection::decompress(reader, data_length as usize);
-    //     }
-    //
-    //
-    //     clientbound::ExplCompressedPacket::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap()
-    // }
-
     pub fn update_compression_threshold(&mut self, new_threshold: i32) {
         *self.compression_threshold.lock().unwrap() = new_threshold;
     }
@@ -107,49 +51,6 @@ impl Connection {
         io::Cursor::new(ibuf)
     }
 
-    pub fn consume_packet(&mut self) -> io::Cursor<Vec<u8>> {
-        let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream.lock().unwrap().deref(), &self.settings, &mut Hints::default()).unwrap();
-
-        self.reader_from_packet(packet_length as usize)
-    }
-
-
-    // TODO: Add default PacketInnerCb so that read_ignore_or_keep_alive can be replaced by this function (return type: (PacketInnerCb, Box<..>)
-    // pub fn read_possible_packets(&mut self, possibilities: HashMap<i32, PacketInnerCb>) -> Box<dyn CustomParcel> {
-    //     let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //     let mut reader = self.reader_from_packet(packet_length as usize);
-    //
-    //
-    //     if self.compression_threshold >= 0 {
-    //
-    //         let VarInt { val: data_length } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //         if data_length > 0 {
-    //             reader = Connection::decompress(reader, data_length as usize);
-    //         }
-    //
-    //     }
-    //
-    //     let VarInt { val: packet_id } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
-    //
-    //     // println!("packet_id: {}", packet_id);
-    //
-    //     // match possibilities.get(&packet_id).unwrap() {
-    //     //     PacketInnerCb::LoginSuccess => {
-    //     //         Box::new(clientbound::LoginSuccess::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap())
-    //     //     },
-    //     //     PacketInnerCb::SetCompression => {
-    //     //         Box::new(clientbound::SetCompression::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap())
-    //     //
-    //     //     },
-    //     // }
-    //
-    //     panic!("no")
-    //
-    // }
-
-
     pub fn read_data<T: StateData>(&mut self) -> T {
         let VarInt { val: packet_length } = VarInt::read_field(&mut self.stream.lock().unwrap().deref(), &self.settings, &mut Hints::default()).unwrap();
 
@@ -157,7 +58,6 @@ impl Connection {
 
 
         if *self.compression_threshold.lock().unwrap() >= 0 {
-
             let VarInt { val: data_length } = VarInt::read_field(&mut reader, &self.settings, &mut Hints::default()).unwrap();
 
             if data_length > 0 {
@@ -186,8 +86,6 @@ impl Connection {
 
         if *self.compression_threshold.lock().unwrap() < 0 {
             let length = data.length(&self);
-            // let mut packet = PacketSb::new(data);
-            // packet.length = length;
 
             self.write_packet(length);
             self.write_packet(data);
@@ -195,12 +93,12 @@ impl Connection {
         } else {
             // Handle compressed data
 
-            // length of data_length is 1
-            let length = 1;
+            // length of the VarInt data_length is 1 byte, see below
+            let data_length_length = 1;
 
             let VarInt { val: packet_length } = data.length(&self);
 
-            let packet_length = VarInt { val: length + packet_length };
+            let packet_length = VarInt { val: data_length_length + packet_length };
             let data_length = VarInt { val: 0 };
 
             self.write_packet(packet_length);
@@ -230,6 +128,3 @@ impl StateData for serverbound::login::Data {}
 impl StateData for serverbound::status::Data {}
 impl StateData for serverbound::play::Data {}
 impl StateData for serverbound::handshaking::Data {}
-
-// impl CustomParcel for LoginSuccess {}
-// impl CustomParcel for SetCompression {}
